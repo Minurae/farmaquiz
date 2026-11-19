@@ -106,8 +106,8 @@
   #player input{font-family:'VT323',monospace;font-size:28px;width:100%;padding:10px;background:#000;color:var(--white);border:3px solid var(--yellow)}
   #player .pbtn{font-family:'Press Start 2P',monospace;font-size:14px;padding:16px;background:var(--purple);color:var(--white);border:3px solid var(--white);box-shadow:4px 4px 0 #000;cursor:pointer;width:100%}
   #player .pbtn:disabled{opacity:.4}
-  #player .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:1}
-  #player .pans{font-family:'VT323',monospace;font-size:24px;color:#fff;border:3px solid rgba(255,255,255,.6);min-height:120px;
+  #player .pgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;flex:1}
+  #player .pans{font-family:'VT323',monospace;font-size:21px;overflow-wrap:break-word;hyphens:auto;min-width:0;color:#fff;border:3px solid rgba(255,255,255,.6);min-height:120px;
     display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;padding:10px;text-align:left;cursor:pointer;line-height:1}
   #player .pans .sh{font-size:34px}
   #player .pq{font-size:24px;line-height:1.05}
@@ -141,7 +141,7 @@
 
 <script>
 // Link that students open (with #jugar so their phone shows the player screen)
-const GAME_VER='3.1';
+const GAME_VER='3.2';
 const PARAMS = new URLSearchParams(location.search);
 const SALA = (PARAMS.get('sala')||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const BROKERS = ['wss://broker.emqx.io:8084/mqtt','wss://broker.hivemq.com:8884/mqtt','wss://test.mosquitto.org:8081/mqtt'];
@@ -155,70 +155,73 @@ const LEVELS = [
   { name:"NIVEL 1: EL CEREBRO", monster:"serobot", mname:"SERO-BOT", sky:"#1d2b53", ground:"#7e2553", groundHi:"#ff77a8",
     intro:"Un robot que controla la serotonina bloquea la sinapsis. ¡Respondan bien para vencerlo!",
     q:[
-      {q:"¿Para qué se usan principalmente los antidepresivos?",
-       o:["Para tratar la depresión","Para bajar la fiebre","Para curar infecciones","Para subir la presión"],
-       e:"Se usan sobre todo para la depresión, pero también para ansiedad, dolor crónico y otros trastornos."},
-      {q:"¿Qué neurotransmisor aumentan los ISRS?",
-       o:["Serotonina","Insulina","Adrenalina de las glándulas","Hemoglobina"],
-       e:"ISRS significa Inhibidores Selectivos de la Recaptación de Serotonina: dejan más serotonina en la sinapsis."},
-      {q:"¿Cuál de estos medicamentos es un antidepresivo?",
-       o:["Fluoxetina","Ibuprofeno","Amoxicilina","Insulina"],
-       e:"La fluoxetina es un ISRS. El ibuprofeno es antiinflamatorio, la amoxicilina es antibiótico y la insulina es una hormona."}
+      {q:"¿Qué significa la sigla ISRS?",
+       o:["Inhibidores Selectivos de la Recaptación de Serotonina","Inductores Selectivos de la Respuesta Serotoninérgica","Inhibidores Sistémicos de Receptores de Serotonina","Inhibidores Selectivos de la Recaptación de Sodio"],
+       e:"Los ISRS bloquean el transportador que recoge la serotonina (SERT), así que esta se queda más tiempo en la sinapsis."},
+      {q:"¿Cuál de estos fármacos NO es un ISRS?",
+       o:["Venlafaxina","Sertralina","Escitalopram","Paroxetina"],
+       e:"La venlafaxina es un IRSN: bloquea la recaptación de serotonina Y de noradrenalina."},
+      {q:"¿Qué bloquean los IMAO?",
+       o:["La enzima que degrada serotonina, noradrenalina y dopamina","El transportador de serotonina (SERT)","Los receptores de dopamina D2","La enzima acetilcolinesterasa"],
+       e:"Los IMAO inhiben la monoaminooxidasa. Sin ella, las monoaminas no se degradan y aumentan en la sinapsis."}
     ]},
   { name:"NIVEL 2: EL HÍGADO", monster:"hepato", mname:"HEPATO-GÓLEM", sky:"#2a1430", ground:"#ab5236", groundHi:"#ffa300",
     intro:"En el hígado, el fármaco se transforma. Un gólem de enzimas los reta.",
     q:[
-      {q:"¿Cuánto tarda un antidepresivo en hacer efecto?",
-       o:["De 2 a 6 semanas","5 minutos","1 hora","Un año"],
-       e:"La química cambia rápido, pero el cerebro necesita semanas para adaptarse y formar nuevas conexiones."},
-      {q:"¿En qué órgano se transforman (metabolizan) la mayoría de antidepresivos?",
-       o:["En el hígado","En el corazón","En los pulmones","En la piel"],
-       e:"El hígado los transforma con enzimas del citocromo P450. Luego salen por la orina."},
-      {q:"Con ciertos antidepresivos (IMAO) hay que evitar un alimento. ¿Cuál?",
-       o:["Queso curado","Arroz blanco","Manzana","Agua"],
-       e:"Los quesos curados tienen tiramina. Con un IMAO puede subir mucho la presión: el \"efecto queso\"."}
+      {q:"La serotonina sube en horas, pero el paciente mejora en 2 a 6 semanas. ¿Por qué?",
+       o:["El cerebro necesita adaptar receptores y formar nuevas conexiones","El fármaco se absorbe muy lento en el intestino","El hígado lo activa poco a poco durante semanas","Primero debe acumularse una dosis tóxica"],
+       e:"La mejoría depende de la neuroplasticidad: desensibilización de receptores y nuevas sinapsis gracias al BDNF."},
+      {q:"¿Qué sistema enzimático del hígado metaboliza a la mayoría de los antidepresivos?",
+       o:["El citocromo P450 (CYP2D6 y CYP2C19)","Las transaminasas ALT y AST","La fosfatasa alcalina","La glucosa-6-fosfato deshidrogenasa"],
+       e:"El citocromo P450 transforma los antidepresivos. Por eso hay interacciones con otros fármacos que usan las mismas enzimas."},
+      {q:"Un paciente que toma un IMAO come mucho queso curado. ¿Qué riesgo corre?",
+       o:["Crisis hipertensiva por la tiramina","Síndrome serotoninérgico","Hipoglucemia grave","Hiponatremia"],
+       e:"Con la MAO bloqueada, la tiramina de quesos curados y embutidos pasa a la sangre y dispara la presión: el \"efecto queso\"."}
     ]},
   { name:"NIVEL 3: EL CUERPO", monster:"slime", mname:"TOXI-SLIME", sky:"#0b3b3b", ground:"#008751", groundHi:"#00e436",
     intro:"Los efectos adversos toman forma de un slime tóxico. ¡No dejen que los alcance!",
     q:[
-      {q:"¿Cuál es un efecto adverso común de los ISRS al empezar?",
-       o:["Náuseas","Crecer más alto","Ver mejor","Dejar de necesitar dormir"],
-       e:"Náuseas, molestias digestivas y cambios en el sueño son comunes al inicio y suelen mejorar."},
-      {q:"¿Se puede dejar un antidepresivo de golpe?",
-       o:["No, se retira poco a poco","Sí, sin problema","Solo si es de noche","Sí, si se toma con café"],
-       e:"Dejarlo de golpe puede causar mareo e irritabilidad (síndrome de discontinuación). Se baja poco a poco."},
-      {q:"Mezclar dos fármacos que suben la serotonina puede causar...",
-       o:["Síndrome serotoninérgico","Gripe","Caries","Miopía"],
-       e:"Es un exceso de serotonina: fiebre, temblor y agitación. Es una emergencia médica."}
+      {q:"Un paciente con sertralina recibe tramadol y presenta fiebre, temblor, clonus y agitación. ¿Qué sospechas?",
+       o:["Síndrome serotoninérgico","Síndrome neuroléptico maligno","Síndrome de discontinuación","Crisis tirotóxica"],
+       e:"Es un exceso de serotonina por combinar fármacos. El clonus es la pista clave. El laboratorio apoya con CK, creatinina y gases arteriales."},
+      {q:"¿Qué grupo de antidepresivos es el más peligroso para el corazón en sobredosis?",
+       o:["Los tricíclicos (ej. amitriptilina)","Los ISRS (ej. fluoxetina)","El bupropión","La mirtazapina"],
+       e:"Los tricíclicos tienen margen terapéutico estrecho: en sobredosis causan arritmias, coma y convulsiones."},
+      {q:"Una paciente deja la paroxetina de golpe y siente mareo, irritabilidad y \"descargas eléctricas\". ¿Qué le pasa?",
+       o:["Síndrome de discontinuación","Síndrome serotoninérgico","Adicción y abstinencia al fármaco","Efecto rebote hipertensivo"],
+       e:"No es adicción: es síndrome de discontinuación, típico de fármacos de vida media corta. Se evita retirándolos poco a poco."}
     ]},
   { name:"NIVEL 4: EL LABORATORIO", monster:"impostor", mname:"EL IMPOSTOR", sky:"#0a3246", ground:"#5f574f", groundHi:"#c2c3c7",
     intro:"Un metabolito disfrazado quiere engañar a las pruebas del laboratorio. ¡Descúbranlo!",
     q:[
-      {q:"¿Qué muestra se usa normalmente para la prueba rápida de drogas?",
-       o:["Orina","Saliva de perro","Cabello cortado ayer","Lágrimas"],
-       e:"El tamizaje de drogas de abuso más común se hace en orina con inmunoensayos."},
-      {q:"Un paciente toma bupropión y sale positivo para anfetaminas sin consumirlas. Eso es un...",
-       o:["Falso positivo","Verdadero positivo","Resultado normal","Error del paciente"],
-       e:"Los metabolitos del bupropión se parecen a las anfetaminas y engañan a la prueba: reacción cruzada."},
-      {q:"¿Qué debe hacer el tecnólogo médico ANTES de interpretar una prueba de drogas?",
-       o:["Preguntar qué medicamentos toma el paciente","Adivinar el resultado","Botar la muestra","Repetirla 10 veces"],
-       e:"Registrar la medicación ayuda a reconocer falsos positivos y evita errores graves."}
+      {q:"Un paciente toma bupropión y su tamizaje de drogas sale positivo para anfetaminas, aunque no las consume. ¿Qué pasó?",
+       o:["Reacción cruzada en el inmunoensayo (falso positivo)","Un verdadero positivo","Un error preanalítico por muestra hemolizada","Interferencia por ácido úrico elevado"],
+       e:"Los metabolitos del bupropión se parecen a las anfetaminas y el anticuerpo de la prueba los confunde."},
+      {q:"¿Qué antidepresivo puede dar un falso positivo para fenciclidina (PCP)?",
+       o:["Venlafaxina","Mirtazapina","Escitalopram","Fluoxetina"],
+       e:"La venlafaxina y la desvenlafaxina pueden reaccionar con el inmunoensayo de PCP."},
+      {q:"¿Cómo se confirma un tamizaje de drogas positivo inesperado?",
+       o:["Con espectrometría de masas (GC-MS o LC-MS/MS)","Repitiendo el inmunoensayo con otra marca","Con la tira reactiva de orina","Con electroforesis de proteínas"],
+       e:"El tamizaje es solo presuntivo. La espectrometría de masas identifica la molécula exacta."},
+      {q:"Te piden niveles de amitriptilina en sangre. ¿Qué debes EVITAR?",
+       o:["Usar un tubo con gel separador","Tomar la muestra justo antes de la dosis","Usar un tubo de tapa roja sin gel","Anotar la hora de la última dosis"],
+       e:"Los fármacos liposolubles se pegan al gel y el resultado sale falsamente bajo. La muestra se toma en valle."}
     ]},
   { name:"JEFE FINAL", monster:"boss", mname:"DR. REACCIÓN CRUZADA", sky:"#14051f", ground:"#7e2553", groundHi:"#83769c", boss:true,
     intro:"¡El Dr. Reacción Cruzada aparece! Usen todo lo aprendido.",
     q:[
-      {q:"¿Cómo se CONFIRMA un resultado positivo de drogas?",
-       o:["Con espectrometría de masas (GC-MS o LC-MS/MS)","Mirando la orina a contraluz","Con un termómetro","Preguntándole al vecino"],
-       e:"La prueba rápida es solo presuntiva. La espectrometría de masas identifica la molécula exacta."},
-      {q:"En adultos mayores, los ISRS pueden bajar en sangre el...",
-       o:["Sodio","Oxígeno del aire","Cabello","Azúcar del café"],
-       e:"Pueden causar hiponatremia (sodio bajo). En el laboratorio se detecta con un electrolito sérico."},
-      {q:"Los ISRS aumentan un poco el riesgo de...",
-       o:["Sangrado","Fracturas de uñas","Resfriados","Sarampión"],
-       e:"Las plaquetas usan serotonina para agregarse. Con ISRS tienen menos y sangran un poco más."},
-      {q:"¿Qué antidepresivo antiguo es peligroso para el corazón en sobredosis?",
-       o:["Amitriptilina (tricíclico)","Paracetamol","Vitamina C","Suero oral"],
-       e:"Los tricíclicos, como la amitriptilina, pueden causar arritmias graves en sobredosis."}
+      {q:"Un adulto mayor que toma escitalopram llega confundido. ¿Qué alteración de laboratorio sospechas primero?",
+       o:["Hiponatremia por SIADH","Hipercalcemia","Hiperpotasemia","Hipoglucemia"],
+       e:"Los ISRS pueden causar secreción inadecuada de ADH y bajar el sodio, sobre todo en adultos mayores. Menos de 120 mmol/L es valor crítico."},
+      {q:"¿Por qué los ISRS aumentan el riesgo de sangrado?",
+       o:["Las plaquetas captan serotonina por el SERT y se quedan con menos","Disminuyen la producción de plaquetas en la médula","Inhiben la vitamina K","Destruyen el fibrinógeno"],
+       e:"Las plaquetas no fabrican serotonina: la toman de la sangre con el SERT. Sin ella se agregan peor."},
+      {q:"¿Qué antidepresivo puede dar un falso positivo para benzodiazepinas?",
+       o:["Sertralina","Bupropión","Venlafaxina","Trazodona"],
+       e:"La sertralina puede reaccionar con el inmunoensayo de benzodiazepinas. Siempre se confirma por espectrometría de masas."},
+      {q:"Un paciente es metabolizador LENTO de CYP2D6 y toma paroxetina. ¿Qué esperas?",
+       o:["Niveles más altos y más efectos adversos","Niveles más bajos y falta de respuesta","Ningún cambio en los niveles","Un falso positivo para PCP"],
+       e:"Si la enzima trabaja lento, el fármaco se acumula. La farmacogenómica ayuda a elegir el fármaco y la dosis."}
     ]}
 ];
 const TOTALQ = LEVELS.reduce((a,l)=>a+l.q.length,0);
@@ -631,7 +634,7 @@ async function makeHostRoom(){
   let client=null, bi=0;
   for(bi=0; bi<BROKERS.length && !client; bi++) client = await tryBroker(BROKERS[bi], {clientId:'h'+HOST_CODE+Math.random().toString(36).slice(2,6)}, 6000);
   if(!client) return null;
-  bi--; JOIN_URL = BASE_URL + '?sala=' + HOST_CODE + '&b=' + bi + '#jugar';
+  bi--; JOIN_URL = BASE_URL + '?sala=' + HOST_CODE + '&b=' + bi + '&v=' + GAME_VER.replace('.','') + '#jugar';
   const base=TOP(HOST_CODE), pres={}, seen={}, peerL=[];
   const fire=(ch)=>{ const ps=api.peers(); peerL.forEach(f=>{try{f({peers:ps,joined:[],left:[],updated:[],...ch});}catch(e){}}); };
   const api={
