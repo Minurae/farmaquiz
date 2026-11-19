@@ -141,6 +141,7 @@
 
 <script>
 // Link that students open (with #jugar so their phone shows the player screen)
+const GAME_VER='3.1';
 const PARAMS = new URLSearchParams(location.search);
 const SALA = (PARAMS.get('sala')||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const BROKERS = ['wss://broker.emqx.io:8084/mqtt','wss://broker.hivemq.com:8884/mqtt','wss://test.mosquitto.org:8081/mqtt'];
@@ -375,12 +376,13 @@ function renderHUD(){
 }
 // ---- emit absolute state to phones ----
 function stateMsg(){
-  const s={e:H.epoch, ph:H.phase, lv:scene.level, n:(H.phase==='reveal'?H.qnum:H.qnum+1), tot:TOTALQ};
+  const s={v:GAME_VER, e:H.epoch, ph:H.phase, lv:scene.level, n:(H.phase==='reveal'?H.qnum:H.qnum+1), tot:TOTALQ};
   if(H.cur && (H.phase==='question'||H.phase==='reveal')){
     s.qid=H.cur.qid; s.q=H.cur.q.q; s.o=H.cur.order.map(i=>H.cur.q.o[i]);
     if(H.phase==='question') s.rem = H.limit? Math.max(0,Math.round(H.limit-(performance.now()-H.t0)/1000)) : null;
     if(H.phase==='reveal'){ s.c=H.cur.order.indexOf(0); s.cnt=H.cur.counts; }
   }
+  if(H.phase==='title') s.ids=players().map(p=>p.peer).slice(0,90);
   if(H.phase==='reveal'||H.phase==='end'||H.phase==='over'){
     const ranked=Object.keys(H.scores).sort((a,b)=>H.scores[b]-H.scores[a]); const pts={};
     ranked.slice(0,60).forEach((p,i)=>pts[p]=[H.scores[p],H.gains[p]||0,i+1,H.hits[p]||0]); s.pts=pts;
@@ -388,7 +390,7 @@ function stateMsg(){
   return s;
 }
 function sync(){ if(room && !IS_PLAYER){ room.emit('state',stateMsg()).catch(()=>{}); } }
-setInterval(()=>{ if(!IS_PLAYER && H.phase!=='title') sync(); },2500);
+setInterval(()=>{ if(!IS_PLAYER) sync(); },2500);
 
 // ---- screens ----
 function setBoard(on){ document.getElementById('game').classList.toggle('board',!!on); }
@@ -401,7 +403,7 @@ function showTitle(){
       <div class="lobcol">
         <div class="h1">CSI LAB: MODO CLASE</div>
         <div class="small">${live?'Escaneen el código con el celular para unirse. Todos votan y, si la <span class="yel">mayoría acierta</span>, ¡el monstruo recibe daño!':(H.connecting?'<span class="yel">Conectando la sala en vivo...</span>':'<span class="red">No se pudo abrir la sala en vivo.</span> Revisa el internet y presiona R para reintentar, o jueguen a mano alzada.')}</div>
-        <div class="url">${esc(JOIN_URL)}</div><div class="h2">CÓDIGO DE SALA: <span class="yel">${HOST_CODE.toUpperCase()}</span></div>
+        <div class="url">${esc(JOIN_URL)}</div><div class="h2">CÓDIGO DE SALA: <span class="yel">${HOST_CODE.toUpperCase()}</span> <span class="lav" style="font-size:0.8cqw">versión ${GAME_VER}</span></div>
         <div class="row"><span class="h2">JUGADORES: <span id="npl">${players().length}</span></span></div>
         <div class="chips" id="chips"></div>
         <div class="row push">
@@ -556,7 +558,10 @@ function enterPlayer(){ IS_PLAYER=true; document.body.className='player'; render
 function myPeer(){ if(!room) return null; try{ const me=room.peers().find(p=>p.sameTab); return me?me.peer:null; }catch(e){ return null; } }
 function renderPlayer(){
   const s=P.st;
-  const key=[P.joined,!!room,P.err,s&&s.ph,s&&s.qid,s&&s.lv,s&&s.n,s&&P.myAns[s.qid],s&&s.pts?JSON.stringify(s.pts[P.myPeer||'']||''):''].join('|');
+  const seenByHost=!!(s&&s.ph==='title'&&Array.isArray(s.ids)&&s.ids.includes(P.myPeer||myPeer()));
+  const hostStale=!P.lastHost||Date.now()-P.lastHost>9000;
+  const waitedLong=!!(P.waitStart&&Date.now()-P.waitStart>9000);
+  const key=[P.joined,!!room,P.err,seenByHost,hostStale,waitedLong,s&&s.v,s&&s.ph,s&&s.qid,s&&s.lv,s&&s.n,s&&P.myAns[s.qid],s&&s.pts?JSON.stringify(s.pts[P.myPeer||'']||''):''].join('|');
   if(key===P.lastKey) return; P.lastKey=key;
   if(!P.joined){
     pl.innerHTML=`<div class="ptitle">CSI LAB<br>MODO CLASE</div>
@@ -567,12 +572,20 @@ function renderPlayer(){
       <div class="pcard" id="pstatus" style="font-size:20px">${room?'<span class="ok">Conectado a la sala '+esc(SALA.toUpperCase())+'.</span>':P.err?'<span class="bad">No se pudo conectar.</span> Prueba con datos móviles u otro wifi y toca reintentar.':'Conectando a la sala '+esc(SALA.toUpperCase())+'...'}</div>${(!room&&P.err)?'<button class="pbtn" onclick="location.reload()">REINTENTAR ↻</button>':''}`;
     pl.querySelectorAll('.avb').forEach(b=>b.onclick=()=>{ P.av=+b.dataset.av; try{localStorage.setItem('csilab_av',P.av);}catch(e){} pl.querySelectorAll('.avb').forEach(x=>x.classList.toggle('sel',x===b)); });
     document.getElementById('joinBtn').onclick=()=>{ const n=document.getElementById('nick').value.trim().replace(/[^\p{L}\p{N} _.-]/gu,'').slice(0,14);
-      if(!n) return; P.nick=n; saveNick(n); P.joined=true; pushPresence(); renderPlayer(); };
+      if(!n) return; P.nick=n; saveNick(n); P.joined=true; P.waitStart=Date.now(); pushPresence(); renderPlayer(); };
     return;
   }
   if(!room){ pl.innerHTML=`<div class="ptitle">SIN CONEXIÓN</div><div class="pcard">${P.err==='lib'?'No se pudo cargar el juego completo. Revisa tu internet.':'No se pudo conectar a la sala. Prueba con datos móviles o con otro wifi.'}</div><button class="pbtn" onclick="location.reload()">REINTENTAR ↻</button>`; return; }
   const head=`<div class="pmeta"><span class="phead"><img src="${avatarURL(P.av)}" alt="">${esc(P.nick)}</span><span>${s&&s.n&&s.ph!=='end'&&s.ph!=='over'?('PREGUNTA '+Math.min(s.n,s.tot)+'/'+s.tot):''}</span></div>`;
-  if(!s || s.ph==='title' || s.ph==='intro' || s.ph==='levelEnd'){
+  if(!s || hostStale || s.ph==='title'){
+    let msg;
+    if(!s || hostStale) msg = (P.waitStart && Date.now()-P.waitStart>9000)
+        ? '<span class="bad">No encuentro la pantalla del salón.</span><br><br>1. En la computadora, recarga el juego (Ctrl+Shift+R).<br>2. Revisa que diga <span class="yel">versión '+GAME_VER+'</span>.<br>3. Vuelve a escanear el código QR nuevo.'
+        : 'Buscando la pantalla del salón...';
+    else if(s.v!==GAME_VER) msg='<span class="bad">La pantalla del salón tiene otra versión del juego.</span><br><br>Recárgala con Ctrl+Shift+R y vuelve a escanear el QR.';
+    else msg = seenByHost ? '<span class="ok">✔ Ya apareces en la pantalla del salón.</span><br><br>Espera a que empiece el juego.' : 'Conectado. Esperando que la pantalla del salón te vea...';
+    pl.innerHTML=`${head}<img class="myav" src="${avatarURL(P.av)}" alt=""><div class="ptitle">¡HOLA, ${esc(P.nick)}!</div><div class="pcard">${msg}</div>${(!s||hostStale)&&P.waitStart&&Date.now()-P.waitStart>9000?'<button class="pbtn" onclick="location.reload()">REINTENTAR ↻</button>':''}`; return; }
+  if(s.ph==='intro' || s.ph==='levelEnd'){
     const lv= s && s.lv!=null && s.ph!=='title' ? `<div class="pbig yel">${esc(LEVELS[s.lv]?LEVELS[s.lv].name:'')}</div>`:'';
     pl.innerHTML=`${head}<img class="myav" src="${avatarURL(P.av)}" alt=""><div class="ptitle">¡LISTO, ${esc(P.nick)}!</div>${lv}<div class="pcard">Mira la pantalla del salón. La pregunta aparecerá aquí.</div>`; return; }
   if(s.ph==='question'){
@@ -597,10 +610,11 @@ function pushPresence(ans){ if(!room||!P.joined) return; const patch={role:'p',n
 
 // ===================== BOOT =====================
 let lastEpochSeen=null;
+setInterval(()=>{ if(IS_PLAYER && P.joined) renderPlayer(); },1500);
 function onState(msg){
   if(!IS_PLAYER) return; const d=msg.data; if(!d||typeof d!=='object') return;
   if(typeof d.ph!=='string') return;
-  P.st=d; if(!P.myPeer) P.myPeer=myPeer(); if(P.joined) renderPlayer();
+  P.st=d; P.lastHost=Date.now(); if(!P.myPeer) P.myPeer=myPeer(); if(P.joined) renderPlayer();
 }
 // ---------- Relay transport (MQTT over secure WebSocket; works on most networks) ----------
 function waitLib(){ return new Promise(r=>{ let n=0; (function chk(){ if(window.mqtt&&window.mqtt.connect) return r(true); if(++n>80) return r(false); setTimeout(chk,100); })(); }); }
@@ -670,11 +684,11 @@ async function boot(){
   room.onPeers(ch=>{
     if(IS_PLAYER) return;
     if(ch.joined.length && H.phase!=='title') sync();
-    if(H.phase==='title'){ renderChips(); if(ch.joined.length) SFX.join(); }
+    if(H.phase==='title'){ renderChips(); if(ch.joined.length){ SFX.join(); sync(); } }
     renderHUD();
   }, ()=>{});
   if(IS_PLAYER){ P.myPeer=myPeer(); renderPlayer(); if(P.joined) pushPresence(); }
-  else showTitle();
+  else { showTitle(); sync(); }
 }
 boot();
 </script>
