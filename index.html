@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js';document.head.appendChild(s);})()"></script>
 <style>
   :root{
     --black:#000; --navy:#1d2b53; --purple:#7e2553; --dgreen:#008751; --brown:#ab5236;
@@ -143,6 +143,8 @@
 // Link that students open (with #jugar so their phone shows the player screen)
 const PARAMS = new URLSearchParams(location.search);
 const SALA = (PARAMS.get('sala')||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const BROKERS = ['wss://broker.emqx.io:8084/mqtt','wss://broker.hivemq.com:8884/mqtt','wss://test.mosquitto.org:8081/mqtt'];
+const BIDX = Math.max(0,Math.min(BROKERS.length-1, parseInt(PARAMS.get('b')||'0')||0));
 const HOST_CODE = Math.random().toString(36).slice(2,7);
 const BASE_URL = location.href.split('#')[0].split('?')[0];
 let JOIN_URL = BASE_URL + '?sala=' + HOST_CODE + '#jugar';
@@ -398,7 +400,7 @@ function showTitle(){
       <div class="qrbox" id="qr"></div>
       <div class="lobcol">
         <div class="h1">CSI LAB: MODO CLASE</div>
-        <div class="small">${live?'Escaneen el código con el celular para unirse. Todos votan y, si la <span class="yel">mayoría acierta</span>, ¡el monstruo recibe daño!':'No hay conexión en vivo: jueguen a mano alzada y toca la opción que eligió la mayoría.'}</div>
+        <div class="small">${live?'Escaneen el código con el celular para unirse. Todos votan y, si la <span class="yel">mayoría acierta</span>, ¡el monstruo recibe daño!':(H.connecting?'<span class="yel">Conectando la sala en vivo...</span>':'<span class="red">No se pudo abrir la sala en vivo.</span> Revisa el internet y presiona R para reintentar, o jueguen a mano alzada.')}</div>
         <div class="url">${esc(JOIN_URL)}</div><div class="h2">CÓDIGO DE SALA: <span class="yel">${HOST_CODE.toUpperCase()}</span></div>
         <div class="row"><span class="h2">JUGADORES: <span id="npl">${players().length}</span></span></div>
         <div class="chips" id="chips"></div>
@@ -534,7 +536,7 @@ function act(a){ switch(a){
   case 'start': startGame(); break; case 'title': SFX.click(); showTitle(); break; case 'fight': SFX.click(); showQuestion(); break;
   case 'next': SFX.click(); next(); break; case 'board': showBoard(); break; case 'nextLevel': scene.level++; showIntro(); break; case 'victory': showVictory(); break; } }
 document.addEventListener('keydown',e=>{ if(IS_PLAYER) return; const k=e.key.toLowerCase();
-  if(k==='f'){toggleFS();return;} if(k==='m'){toggleSound();return;}
+  if(k==='f'){toggleFS();return;} if(k==='m'){toggleSound();return;} if(k==='r'&&H.phase==='title'&&!room&&!H.connecting){location.reload();return;}
   if(H.phase==='question'){ if(H.manual){ const i='1234'.indexOf(k)>=0?'1234'.indexOf(k):'abcd'.indexOf(k); if(i>=0&&k.length===1){reveal(i);return;} }
     else if(k==='enter'){ e.preventDefault(); reveal(); return; } }
   if((k==='enter'||k===' ') && document.getElementById('game').classList.contains('board')) return;
@@ -554,21 +556,21 @@ function enterPlayer(){ IS_PLAYER=true; document.body.className='player'; render
 function myPeer(){ if(!room) return null; try{ const me=room.peers().find(p=>p.sameTab); return me?me.peer:null; }catch(e){ return null; } }
 function renderPlayer(){
   const s=P.st;
-  const key=[P.joined,!!room,s&&s.ph,s&&s.qid,s&&s.lv,s&&s.n,s&&P.myAns[s.qid],s&&s.pts?JSON.stringify(s.pts[P.myPeer||'']||''):''].join('|');
+  const key=[P.joined,!!room,P.err,s&&s.ph,s&&s.qid,s&&s.lv,s&&s.n,s&&P.myAns[s.qid],s&&s.pts?JSON.stringify(s.pts[P.myPeer||'']||''):''].join('|');
   if(key===P.lastKey) return; P.lastKey=key;
   if(!P.joined){
     pl.innerHTML=`<div class="ptitle">CSI LAB<br>MODO CLASE</div>
       <div class="pcard">Escribe tu apodo y elige tu gatito.</div>
-      <input id="nick" maxlength="14" placeholder="Tu apodo" value="${esc(P.nick||loadNick())}">
+      <input id="nick" maxlength="14" placeholder="Tu apodo" value="${esc((document.getElementById('nick')||{}).value||P.nick||loadNick())}">
       <div class="avgrid">${KCOL.map((_,i)=>`<button class="avb ${i===P.av?'sel':''}" data-av="${i}"><img src="${avatarURL(i)}" alt="gatito ${i+1}"></button>`).join('')}</div>
       <button class="pbtn" id="joinBtn">UNIRME ▶</button>
-      <div class="pcard" id="pstatus" style="font-size:20px">${room?'<span class="ok">Conectado a la sala '+esc(SALA.toUpperCase())+'.</span>':'Conectando a la sala '+esc(SALA.toUpperCase())+'...'}</div>`;
+      <div class="pcard" id="pstatus" style="font-size:20px">${room?'<span class="ok">Conectado a la sala '+esc(SALA.toUpperCase())+'.</span>':P.err?'<span class="bad">No se pudo conectar.</span> Prueba con datos móviles u otro wifi y toca reintentar.':'Conectando a la sala '+esc(SALA.toUpperCase())+'...'}</div>${(!room&&P.err)?'<button class="pbtn" onclick="location.reload()">REINTENTAR ↻</button>':''}`;
     pl.querySelectorAll('.avb').forEach(b=>b.onclick=()=>{ P.av=+b.dataset.av; try{localStorage.setItem('csilab_av',P.av);}catch(e){} pl.querySelectorAll('.avb').forEach(x=>x.classList.toggle('sel',x===b)); });
     document.getElementById('joinBtn').onclick=()=>{ const n=document.getElementById('nick').value.trim().replace(/[^\p{L}\p{N} _.-]/gu,'').slice(0,14);
       if(!n) return; P.nick=n; saveNick(n); P.joined=true; pushPresence(); renderPlayer(); };
     return;
   }
-  if(!room){ pl.innerHTML=`<div class="ptitle">SIN CONEXIÓN</div><div class="pcard">No se pudo conectar a la sala. Revisa que tengas internet y que la pantalla del salón tenga el juego abierto. Vuelve a escanear el código.</div>`; return; }
+  if(!room){ pl.innerHTML=`<div class="ptitle">SIN CONEXIÓN</div><div class="pcard">${P.err==='lib'?'No se pudo cargar el juego completo. Revisa tu internet.':'No se pudo conectar a la sala. Prueba con datos móviles o con otro wifi.'}</div><button class="pbtn" onclick="location.reload()">REINTENTAR ↻</button>`; return; }
   const head=`<div class="pmeta"><span class="phead"><img src="${avatarURL(P.av)}" alt="">${esc(P.nick)}</span><span>${s&&s.n&&s.ph!=='end'&&s.ph!=='over'?('PREGUNTA '+Math.min(s.n,s.tot)+'/'+s.tot):''}</span></div>`;
   if(!s || s.ph==='title' || s.ph==='intro' || s.ph==='levelEnd'){
     const lv= s && s.lv!=null && s.ph!=='title' ? `<div class="pbig yel">${esc(LEVELS[s.lv]?LEVELS[s.lv].name:'')}</div>`:'';
@@ -600,59 +602,69 @@ function onState(msg){
   if(typeof d.ph!=='string') return;
   P.st=d; if(!P.myPeer) P.myPeer=myPeer(); if(P.joined) renderPlayer();
 }
-// ---------- PeerJS transport (same small interface the game uses) ----------
-function makeHostRoom(){
+// ---------- Relay transport (MQTT over secure WebSocket; works on most networks) ----------
+function waitLib(){ return new Promise(r=>{ let n=0; (function chk(){ if(window.mqtt&&window.mqtt.connect) return r(true); if(++n>80) return r(false); setTimeout(chk,100); })(); }); }
+function tryBroker(url, opts, ms){
   return new Promise(resolve=>{
-    if(!window.Peer) return resolve(null);
-    let done=false; const conns={}, pres={}, topicL={}, peerL=[];
-    const fire=(ch)=>{ const ps=api.peers(); peerL.forEach(f=>{try{f({peers:ps,joined:[],left:[],updated:[],...ch});}catch(e){}}); };
-    const api={
-      peers:()=>[{peer:'host',sameTab:true,isMe:true,presence:{}} , ...Object.keys(pres).map(id=>({peer:id,sameTab:false,isMe:false,presence:pres[id]}))],
-      emit:async(topic,data)=>{ for(const c of Object.values(conns)){ try{ if(c.open) c.send({t:'emit',topic,data}); }catch(e){} } },
-      on:(topic,f)=>{ (topicL[topic]=topicL[topic]||[]).push(f); return ()=>{}; },
-      onPeers:(f)=>{ peerL.push(f); return ()=>{}; },
-      presence:async()=>{}, connected:()=>true
-    };
-    let peer;
-    try{ peer=new Peer('csilab-'+HOST_CODE); }catch(e){ return resolve(null); }
-    peer.on('open',()=>{ done=true; resolve(api); });
-    peer.on('error',()=>{ if(!done){ done=true; resolve(null); } });
-    peer.on('connection',conn=>{
-      conn.on('open',()=>{ conns[conn.peer]=conn; });
-      conn.on('data',d=>{ if(!d||d.t!=='pres'||typeof d.p!=='object') return;
-        const isNew=!(conn.peer in pres); pres[conn.peer]=d.p;
-        const me=api.peers().find(x=>x.peer===conn.peer); fire(isNew?{joined:[me]}:{updated:[me]}); });
-      const gone=()=>{ delete conns[conn.peer]; if(conn.peer in pres){ delete pres[conn.peer]; fire({left:[{peer:conn.peer}]}); } };
-      conn.on('close',gone); conn.on('error',gone);
-    });
-    setTimeout(()=>{ if(!done){ done=true; resolve(null); } },10000);
+    let c; try{ c=window.mqtt.connect(url,{connectTimeout:ms,reconnectPeriod:2000,keepalive:20,clean:true,...opts}); }catch(e){ return resolve(null); }
+    let done=false; const t=setTimeout(()=>{ if(!done){ done=true; try{c.end(true);}catch(e){} resolve(null);} }, ms+500);
+    c.once('connect',()=>{ if(!done){ done=true; clearTimeout(t); resolve(c);} });
   });
 }
-function makePlayerRoom(){
-  return new Promise(resolve=>{
-    if(!window.Peer || !SALA) return resolve(null);
-    let my={}, conn=null, myId=null, done=false; const topicL={};
-    const api={
-      peers:()=>[{peer:myId,sameTab:true,isMe:true,presence:my}],
-      emit:async()=>{}, on:(t,f)=>{ (topicL[t]=topicL[t]||[]).push(f); return ()=>{}; }, onPeers:()=>()=>{},
-      presence:async(patch)=>{ my={...my,...patch}; try{ if(conn&&conn.open) conn.send({t:'pres',p:my}); }catch(e){} },
-      connected:()=>!!(conn&&conn.open)
-    };
-    let peer; try{ peer=new Peer(); }catch(e){ return resolve(null); }
-    function connect(){
-      conn=peer.connect('csilab-'+SALA,{reliable:true});
-      conn.on('open',()=>{ if(!done){done=true;resolve(api);} try{ conn.send({t:'pres',p:my}); }catch(e){} });
-      conn.on('data',d=>{ if(d&&d.t==='emit') (topicL[d.topic]||[]).forEach(f=>{try{f({topic:d.topic,data:d.data,peer:'host'});}catch(e){}}); });
-      conn.on('close',()=>setTimeout(connect,2000));
-    }
-    peer.on('open',id=>{ myId=id; connect(); });
-    peer.on('error',e=>{ if(!done && e && e.type==='peer-unavailable'){ setTimeout(connect,2500); } });
-    setTimeout(()=>{ if(!done){ done=true; resolve(null); } },15000);
+const TOP = code => 'csilab-v2/'+code;
+async function makeHostRoom(){
+  if(!(await waitLib())) return null;
+  let client=null, bi=0;
+  for(bi=0; bi<BROKERS.length && !client; bi++) client = await tryBroker(BROKERS[bi], {clientId:'h'+HOST_CODE+Math.random().toString(36).slice(2,6)}, 6000);
+  if(!client) return null;
+  bi--; JOIN_URL = BASE_URL + '?sala=' + HOST_CODE + '&b=' + bi + '#jugar';
+  const base=TOP(HOST_CODE), pres={}, seen={}, peerL=[];
+  const fire=(ch)=>{ const ps=api.peers(); peerL.forEach(f=>{try{f({peers:ps,joined:[],left:[],updated:[],...ch});}catch(e){}}); };
+  const api={
+    peers:()=>[{peer:'host',sameTab:true,isMe:true,presence:{}}, ...Object.keys(pres).map(id=>({peer:id,sameTab:false,isMe:false,presence:pres[id]}))],
+    emit:async(topic,data)=>{ try{ client.publish(base+'/'+topic, JSON.stringify(data), {qos:0, retain:true}); }catch(e){} },
+    on:()=>()=>{}, onPeers:(f)=>{ peerL.push(f); return ()=>{}; }, presence:async()=>{}, connected:()=>client.connected
+  };
+  const sub=()=>client.subscribe(base+'/p/+',{qos:0});
+  sub(); client.on('connect',sub);
+  client.on('message',(topic,payload)=>{
+    const id=topic.split('/').pop(); if(!/^[a-z0-9]{4,24}$/.test(id)) return;
+    let txt=''; try{ txt=new TextDecoder().decode(payload); }catch(e){}
+    if(!txt){ if(id in pres){ delete pres[id]; delete seen[id]; fire({left:[{peer:id}]}); } return; }
+    let p; try{ p=JSON.parse(txt); }catch(e){ return; } if(!p||typeof p!=='object'||p.role!=='p') return;
+    const isNew=!(id in pres); pres[id]=p; seen[id]=Date.now();
+    const me=api.peers().find(x=>x.peer===id); fire(isNew?{joined:[me]}:{updated:[me]});
   });
+  setInterval(()=>{ const now=Date.now(); for(const id of Object.keys(seen)){ if(now-seen[id]>30000){ delete pres[id]; delete seen[id]; fire({left:[{peer:id}]}); } } },5000);
+  return api;
+}
+async function makePlayerRoom(){
+  if(!SALA) return null;
+  if(!(await waitLib())) { P.err='lib'; return null; }
+  const myId='p'+Math.random().toString(36).slice(2,10);
+  const base=TOP(SALA), me=base+'/p/'+myId;
+  const client = await tryBroker(BROKERS[BIDX], {clientId:myId, will:{topic:me, payload:'', qos:0, retain:false}}, 10000);
+  if(!client){ P.err='net'; return null; }
+  let my={}; const topicL={};
+  const send=()=>{ if(my.role) try{ client.publish(me, JSON.stringify(my), {qos:0}); }catch(e){} };
+  const api={
+    peers:()=>[{peer:myId,sameTab:true,isMe:true,presence:my}],
+    emit:async()=>{}, on:(t,f)=>{ (topicL[t]=topicL[t]||[]).push(f); return ()=>{}; }, onPeers:()=>()=>{},
+    presence:async(patch)=>{ my={...my,...patch}; send(); }, connected:()=>client.connected
+  };
+  const sub=()=>{ client.subscribe(base+'/state',{qos:0}); send(); };
+  sub(); client.on('connect',sub);
+  client.on('message',(topic,payload)=>{ if(topic!==base+'/state') return; let d; try{ d=JSON.parse(new TextDecoder().decode(payload)); }catch(e){ return; }
+    (topicL.state||[]).forEach(f=>{ try{ f({topic:'state',data:d,peer:'host'}); }catch(e){} }); });
+  setInterval(send, 10000);
+  window.addEventListener('pagehide',()=>{ try{ client.publish(me,'',{qos:0}); client.end(); }catch(e){} });
+  return api;
 }
 async function boot(){
+  H.connecting=true;
   if(IS_PLAYER) enterPlayer(); else showTitle();
   room = IS_PLAYER ? await makePlayerRoom() : await makeHostRoom();
+  H.connecting=false;
   if(!room){ if(IS_PLAYER) renderPlayer(); else showTitle(); return; }
   room.on('state', onState, ()=>{});
   room.onPeers(ch=>{
