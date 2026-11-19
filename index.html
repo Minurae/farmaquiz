@@ -343,7 +343,13 @@ const SFX={ click:()=>tone(N(84),0.05,'square',0.04), ok:()=>[72,76,79,84].forEa
   over:()=>[67,63,60,55].forEach((m,i)=>tone(N(m),0.25,'square',0.07,i*0.22)), tick:()=>tone(N(96),0.03,'square',0.025), join:()=>tone(N(91),0.06,'square',0.04)};
 const PROG=[57,53,48,55], MEL=[[69,72,76,72,74,72,69,67],[65,69,72,69,72,74,72,69],[64,67,72,67,76,74,72,67],[67,71,74,71,74,76,74,71]];
 function startMusic(){ if(musicTimer||IS_PLAYER)return; musicTimer=setInterval(()=>{ if(!soundOn)return; const bar=Math.floor(musicStep/8)%4,k=musicStep%8,r=PROG[bar];
-  tone(N(k%2?r:r-12),0.18,'triangle',0.05); if(H.phase==='question') tone(N(MEL[bar][k]),0.12,'square',0.018); musicStep++; },208);}
+  tone(N(k%2?r:r-12),0.18,'triangle',0.05); tone(N(MEL[bar][k]+((Math.floor(musicStep/32)%2&&k%4===3)?12:0)),0.12,'square',0.025);
+  if(k%2===0 && AC && soundOn){ try{ const a=AC, n=Math.floor(a.sampleRate*0.03), buf=a.createBuffer(1,n,a.sampleRate), d=buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(a.sampleRate*0.008)); const src=a.createBufferSource(), g=a.createGain(); g.gain.value=0.04; src.buffer=buf; src.connect(g).connect(a.destination); src.start(); }catch(e){} }
+  musicStep++; },208);}
+// music starts with the first click or key on the projector screen (browsers need a gesture for sound)
+function firstGesture(){ if(IS_PLAYER) return; ac(); startMusic(); document.removeEventListener('pointerdown',firstGesture); document.removeEventListener('keydown',firstGesture); }
+document.addEventListener('pointerdown',firstGesture); document.addEventListener('keydown',firstGesture);
 
 // ===================== ROOM (live class) =====================
 let room=null, userNS=null;
